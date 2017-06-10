@@ -22,8 +22,8 @@ profile = False
 #-----------------------------------------------------------------------------#
 # Specify model and table locations here
 #-----------------------------------------------------------------------------#
-path_to_models = '/u/rkiros/public_html/models/'
-path_to_tables = '/u/rkiros/public_html/models/'
+path_to_models = '../../'
+path_to_tables = '../../'
 #-----------------------------------------------------------------------------#
 
 path_to_umodel = path_to_models + 'uni_skip.npz'
@@ -51,10 +51,12 @@ def load_model(**k):
 
     # Extractor functions
     print('Compiling encoders...')
-    embedding, x_mask, ctxw2v = build_encoder(utparams, uoptions)
+    embedding, x_mask, ctxw2v, hs = build_encoder(utparams, uoptions)
     f_w2v = theano.function([embedding, x_mask], ctxw2v, name='f_w2v')
-    embedding, x_mask, ctxw2v = build_encoder_bi(btparams, boptions)
+    f_w2v_h = theano.function([embedding, x_mask], hs, name='f_w2v_h')
+    embedding, x_mask, ctxw2v, hs = build_encoder_bi(btparams, boptions)
     f_w2v2 = theano.function([embedding, x_mask], ctxw2v, name='f_w2v2')
+    f_w2v2_h = theano.function([embedding, x_mask], hs, name='f_w2v2_h')
 
     # Tables
     print('Loading tables...')
@@ -69,6 +71,8 @@ def load_model(**k):
     model['btable'] = btable
     model['f_w2v'] = f_w2v
     model['f_w2v2'] = f_w2v2
+    model['f_w2v_h'] = f_w2v_h
+    model['f_w2v2_h'] = f_w2v2_h
 
     return model
 
@@ -95,13 +99,13 @@ class Encoder(object):
     """
 
     def __init__(self, model):
-      self._model = model
+        self._model = model
 
     def encode(self, X, use_norm=True, verbose=True, batch_size=128, use_eos=False):
-      """
-      Encode sentences in the list X. Each entry will return a vector
-      """
-      return encode(self._model, X, use_norm, verbose, batch_size, use_eos)
+        """
+        Encode sentences in the list X. Each entry will return a vector
+        """
+        return encode(self._model, X, use_norm, verbose, batch_size, use_eos)
 
 
 def encode(model, X, use_norm=True, verbose=True, batch_size=128, use_eos=False):
@@ -134,11 +138,15 @@ def encode(model, X, use_norm=True, verbose=True, batch_size=128, use_eos=False)
             caps = ds[k][minibatch::numbatches]
 
             if use_eos:
-                uembedding = numpy.zeros((k+1, len(caps), model['uoptions']['dim_word']), dtype='float32')
-                bembedding = numpy.zeros((k+1, len(caps), model['boptions']['dim_word']), dtype='float32')
+                uembedding = numpy.zeros((k+1, len(caps), model['uoptions']['dim_word']), 
+                                         dtype='float32')
+                bembedding = numpy.zeros((k+1, len(caps), model['boptions']['dim_word']), 
+                                         dtype='float32')
             else:
-                uembedding = numpy.zeros((k, len(caps), model['uoptions']['dim_word']), dtype='float32')
-                bembedding = numpy.zeros((k, len(caps), model['boptions']['dim_word']), dtype='float32')
+                uembedding = numpy.zeros((k, len(caps), model['uoptions']['dim_word']), 
+                                         dtype='float32')
+                bembedding = numpy.zeros((k, len(caps), model['boptions']['dim_word']), 
+                                         dtype='float32')
             for ind, c in enumerate(caps):
                 caption = captions[c]
                 for j in range(len(caption)):
@@ -152,11 +160,15 @@ def encode(model, X, use_norm=True, verbose=True, batch_size=128, use_eos=False)
                     uembedding[-1,ind] = model['utable']['<eos>']
                     bembedding[-1,ind] = model['btable']['<eos>']
             if use_eos:
-                uff = model['f_w2v'](uembedding, numpy.ones((len(caption)+1,len(caps)), dtype='float32'))
-                bff = model['f_w2v2'](bembedding, numpy.ones((len(caption)+1,len(caps)), dtype='float32'))
+                uff = model['f_w2v'](uembedding, numpy.ones((len(caption)+1,len(caps)), 
+                                                            dtype='float32'))
+                bff = model['f_w2v2'](bembedding, numpy.ones((len(caption)+1,len(caps)), 
+                                                             dtype='float32'))
             else:
-                uff = model['f_w2v'](uembedding, numpy.ones((len(caption),len(caps)), dtype='float32'))
-                bff = model['f_w2v2'](bembedding, numpy.ones((len(caption),len(caps)), dtype='float32'))
+                uff = model['f_w2v'](uembedding, numpy.ones((len(caption),len(caps)), 
+                                                            dtype='float32'))
+                bff = model['f_w2v2'](bembedding, numpy.ones((len(caption),len(caps)), 
+                                                             dtype='float32'))
             if use_norm:
                 for j in range(len(uff)):
                     uff[j] /= norm(uff[j])
@@ -168,6 +180,55 @@ def encode(model, X, use_norm=True, verbose=True, batch_size=128, use_eos=False)
     features = numpy.c_[ufeatures, bfeatures]
     return features
 
+
+def encode_hidden(model, X, preprocessing=False, use_norm=True):
+    """
+    Simplified encoder using the skip-thoughts model that returns hidden states for
+    all words. Less efficient because it does not make minibatches. Adapted from:
+    https://github.com/lgelderloos/nlp_brain/timesteps.py
+    """
+    if preprocessing:
+        X = preprocess(X)
+        
+    captions = [s.split() for s in X]
+    words = sum([len(caption) for caption in captions])
+    
+    ufeatures = numpy.zeros((words, model['uoptions']['dim']), dtype='float32')
+    bfeatures = numpy.zeros((words, 2 * model['boptions']['dim']), dtype='float32')
+    
+    height = 0
+    
+    for sentence_index, caption in enumerate(captions):
+        uembedding = numpy.zeros((len(caption), 1, model['uoptions']['dim_word']), 
+                                 dtype='float32')
+        bembedding = numpy.zeros((len(caption), 1, model['boptions']['dim_word']), 
+                                 dtype='float32')
+        
+        for position, word in enumerate(caption):
+            uembedding[position,0] = model['utable'][word]
+            bembedding[position,0] = model['btable'][word]
+            
+        uff = model['f_w2v_h'](uembedding, numpy.ones((len(caption),1), 
+                                                    dtype='float32'))
+        bff = model['f_w2v2_h'](bembedding, numpy.ones((len(caption),1), 
+                                                     dtype='float32'))
+        
+        if use_norm:
+            for j in range(len(uff)):
+                uff[j] /= norm(uff[j])
+                bff[j] /= norm(bff[j])
+        
+        if six.PY2: bff = bff.reshape(bff.shape[0], bff.shape[1]/2, bff.shape[2]*2)
+        if six.PY3: bff = bff.reshape(bff.shape[0], bff.shape[1]//2, bff.shape[2]*2)
+        
+        shape = ufeatures[height:height+position+1].shape
+        ufeatures[height:height+position+1] = uff[:,0,:]
+        bfeatures[height:height+position+1] = bff[:,0,:]
+        
+        height += len(caption)
+    
+    features = numpy.c_[ufeatures, bfeatures]
+    return features
 
 def preprocess(text):
     """
@@ -314,7 +375,7 @@ def build_encoder(tparams, options):
                                             mask=x_mask)
     ctx = proj[0][-1]
 
-    return embedding, x_mask, ctx
+    return embedding, x_mask, ctx, proj[0]
 
 
 def build_encoder_bi(tparams, options):
@@ -337,7 +398,7 @@ def build_encoder_bi(tparams, options):
 
     ctx = tensor.concatenate([proj[0][-1], projr[0][-1]], axis=1)
 
-    return embedding, x_mask, ctx
+    return embedding, x_mask, ctx, tensor.concatenate([proj[0], projr[0]], axis=1)
 
 
 # some utilities
