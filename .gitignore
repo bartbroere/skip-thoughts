@@ -58,3 +58,7 @@ target/
 
 # Downloaded data files
 data/
+
+# PyCharm
+.idea
+venv/
