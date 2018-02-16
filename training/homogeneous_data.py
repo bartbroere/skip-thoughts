@@ -1,5 +1,7 @@
-import numpy
 import copy
+
+import numpy
+
 
 class HomogeneousData():
 
@@ -74,6 +76,7 @@ class HomogeneousData():
     def __iter__(self):
         return self
 
+
 def prepare_data(seqs_x, seqs_y, seqs_z, worddict, maxlen=None, n_words=20000):
     """
     Put the data into format useable by the model
@@ -140,6 +143,7 @@ def prepare_data(seqs_x, seqs_y, seqs_z, worddict, maxlen=None, n_words=20000):
         z_mask[:lengths_z[idx]+1,idx] = 1.
 
     return x, x_mask, y, y_mask, z, z_mask
+
 
 def grouper(text):
     """

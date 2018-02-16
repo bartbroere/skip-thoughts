@@ -1,9 +1,10 @@
 """
 Optimizers for skip-thoughts
 """
+import numpy
 import theano
 import theano.tensor as tensor
-import numpy
+
 
 # name(hyperp, tparams, grads, inputs (list), cost) = f_grad_shared, f_update
 def adam(lr, tparams, grads, inp, cost):

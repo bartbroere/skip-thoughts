@@ -2,11 +2,12 @@
 A selection of functions for extracting vectors
 Encoder + vocab expansion
 """
+import six
 import theano
-import theano.tensor as tensor
 from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 
-import cPickle as pkl
+if six.PY2: import cPickle as pkl
+if six.PY3: import pickle as pkl
 import numpy
 import nltk
 
@@ -16,8 +17,8 @@ from scipy.linalg import norm
 from gensim.models import Word2Vec as word2vec
 from sklearn.linear_model import LinearRegression
 
-from utils import load_params, init_tparams
-from model import init_params, build_encoder, build_encoder_w2v
+from training.utils import load_params, init_tparams
+from training.model import init_params, build_encoder, build_encoder_w2v
 
 #-----------------------------------------------------------------------------#
 # Specify model and dictionary locations here
@@ -27,36 +28,37 @@ path_to_dictionary = '/ais/gobi3/u/rkiros/bookgen/book_dictionary_large.pkl'
 path_to_word2vec = '/ais/gobi3/u/rkiros/word2vec/GoogleNews-vectors-negative300.bin'
 #-----------------------------------------------------------------------------#
 
+
 def load_model(embed_map=None):
     """
     Load all model components + apply vocab expansion
     """
     # Load the worddict
-    print 'Loading dictionary...'
+    print('Loading dictionary...')
     with open(path_to_dictionary, 'rb') as f:
         worddict = pkl.load(f)
 
     # Create inverted dictionary
-    print 'Creating inverted dictionary...'
+    print('Creating inverted dictionary...')
     word_idict = dict()
-    for kk, vv in worddict.iteritems():
+    for kk, vv in worddict.items():
         word_idict[vv] = kk
     word_idict[0] = '<eos>'
     word_idict[1] = 'UNK'
 
     # Load model options
-    print 'Loading model options...'
+    print('Loading model options...')
     with open('%s.pkl'%path_to_model, 'rb') as f:
         options = pkl.load(f)
 
     # Load parameters
-    print 'Loading model parameters...'
+    print('Loading model parameters...')
     params = init_params(options)
     params = load_params(path_to_model, params)
     tparams = init_tparams(params)
 
     # Extractor functions
-    print 'Compiling encoder...'
+    print('Compiling encoder...')
     trng = RandomStreams(1234)
     trng, x, x_mask, ctx, emb = build_encoder(tparams, options)
     f_enc = theano.function([x, x_mask], ctx, name='f_enc')
@@ -65,22 +67,23 @@ def load_model(embed_map=None):
     f_w2v = theano.function([embedding, x_mask], ctxw2v, name='f_w2v')
 
     # Load word2vec, if applicable
-    if embed_map == None:
-        print 'Loading word2vec embeddings...'
+    if embed_map is None:
+        print('Loading word2vec embeddings...')
         embed_map = load_googlenews_vectors(path_to_word2vec)
 
     # Lookup table using vocab expansion trick
-    print 'Creating word lookup tables...'
+    print('Creating word lookup tables...')
     table = lookup_table(options, embed_map, worddict, word_idict, f_emb)
 
     # Store everything we need in a dictionary
-    print 'Packing up...'
+    print('Packing up...')
     model = {}
     model['options'] = options
     model['table'] = table
     model['f_w2v'] = f_w2v
 
     return model
+
 
 def encode(model, X, use_norm=True, verbose=True, batch_size=128, use_eos=False):
     """
@@ -104,8 +107,11 @@ def encode(model, X, use_norm=True, verbose=True, batch_size=128, use_eos=False)
     # Get features. This encodes by length, in order to avoid wasting computation
     for k in ds.keys():
         if verbose:
-            print k
-        numbatches = len(ds[k]) / batch_size + 1
+            print(k)
+        if six.PY2:
+            numbatches = len(ds[k]) / batch_size + 1
+        elif six.PY3:
+            numbatches = len(ds[k]) // batch_size + 1
         for minibatch in range(numbatches):
             caps = ds[k][minibatch::numbatches]
 
@@ -134,6 +140,7 @@ def encode(model, X, use_norm=True, verbose=True, batch_size=128, use_eos=False)
     
     return features
 
+
 def preprocess(text):
     """
     Preprocess text for encoder
@@ -149,12 +156,14 @@ def preprocess(text):
         X.append(result)
     return X
 
+
 def load_googlenews_vectors():
     """
     load the word2vec GoogleNews vectors
     """
     embed_map = word2vec.load_word2vec_format(path_to_word2vec, binary=True)
     return embed_map
+
 
 def lookup_table(options, embed_map, worddict, word_idict, f_emb, use_norm=False):
     """
@@ -171,6 +180,7 @@ def lookup_table(options, embed_map, worddict, word_idict, f_emb, use_norm=False
             table[w] /= norm(table[w])
     return table
 
+
 def get_embeddings(options, word_idict, f_emb, use_norm=False):
     """
     Extract the RNN embeddings from the model
@@ -183,6 +193,7 @@ def get_embeddings(options, word_idict, f_emb, use_norm=False):
             ff /= norm(ff)
         d[word_idict[i]] = ff
     return d
+
 
 def train_regressor(options, embed_map, wordvecs, worddict):
     """
@@ -209,6 +220,7 @@ def train_regressor(options, embed_map, wordvecs, worddict):
     clf = LinearRegression()
     clf.fit(w2v, sg)
     return clf
+
 
 def apply_regressor(clf, embed_map, use_norm=False):
     """
