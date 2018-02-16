@@ -1,0 +1,7 @@
+pip-tools
+theano
+numpy
+scikit-learn
+six
+nltk
+gensim
