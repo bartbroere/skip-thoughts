@@ -1,8 +1,10 @@
 """
 Code for sequence generation
 """
-import numpy
 import copy
+
+import numpy
+
 
 def gen_sample(tparams, f_init, f_next, ctx, options, trng=None, k=1, maxlen=30,
                stochastic=True, argmax=False, use_unk=False):

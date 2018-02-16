@@ -7,17 +7,17 @@ To add a new layer:
 3) In the trainer function, replace 'encoder' or 'decoder' with your layer name
 
 """
+import numpy
 import theano
 import theano.tensor as tensor
 
-import numpy
-
-from utils import _p, ortho_weight, norm_weight, tanh, linear
+from decoding.utils import _p, ortho_weight, norm_weight
 
 # layers: 'name': ('parameter initializer', 'feedforward')
 layers = {'ff': ('param_init_fflayer', 'fflayer'),
           'gru': ('param_init_gru', 'gru_layer'),
           }
+
 
 def get_layer(name):
     """
@@ -25,6 +25,7 @@ def get_layer(name):
     """
     fns = layers[name]
     return (eval(fns[0]), eval(fns[1]))
+
 
 # Feedforward layer
 def param_init_fflayer(options, params, prefix='ff', nin=None, nout=None, ortho=True):
@@ -40,11 +41,13 @@ def param_init_fflayer(options, params, prefix='ff', nin=None, nout=None, ortho=
 
     return params
 
+
 def fflayer(tparams, state_below, options, prefix='rconv', activ='lambda x: tensor.tanh(x)', **kwargs):
     """
     Feedforward pass
     """
     return eval(activ)(tensor.dot(state_below, tparams[_p(prefix,'W')])+tparams[_p(prefix,'b')])
+
 
 # GRU layer
 def param_init_gru(options, params, prefix='gru', nin=None, dim=None):
@@ -70,6 +73,7 @@ def param_init_gru(options, params, prefix='gru', nin=None, dim=None):
     params[_p(prefix,'bx')] = numpy.zeros((dim,)).astype('float32')
 
     return params
+
 
 def gru_layer(tparams, state_below, init_state, options, prefix='gru', mask=None, one_step=False, **kwargs):
     """

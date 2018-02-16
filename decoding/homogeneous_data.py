@@ -1,11 +1,13 @@
-import numpy
 import copy
 import sys
+
+import numpy
 
 #------------------------------------------------------------------------------
 sys.path.append('/u/rkiros/research/skipthoughts/')
 import skipthoughts
 #------------------------------------------------------------------------------
+
 
 class HomogeneousData():
 
@@ -76,6 +78,7 @@ class HomogeneousData():
 
     def __iter__(self):
         return self
+
 
 def prepare_data(caps, features, worddict, model, maxlen=None, n_words=10000):
     """

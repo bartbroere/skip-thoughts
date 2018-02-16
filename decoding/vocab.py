@@ -1,9 +1,16 @@
 """
 Constructing and loading dictionaries
 """
-import cPickle as pkl
-import numpy
 from collections import OrderedDict
+
+import numpy
+import six
+
+if six.PY2:
+    import cPickle as pkl
+elif six.PY3:
+    import pickle as pkl
+
 
 def build_dictionary(text):
     """
@@ -27,6 +34,7 @@ def build_dictionary(text):
 
     return worddict, wordcount
 
+
 def load_dictionary(loc='/ais/gobi3/u/rkiros/bookgen/book_dictionary_large.pkl'):
     """
     Load a dictionary
@@ -34,6 +42,7 @@ def load_dictionary(loc='/ais/gobi3/u/rkiros/bookgen/book_dictionary_large.pkl')
     with open(loc, 'rb') as f:
         worddict = pkl.load(f)
     return worddict
+
 
 def save_dictionary(worddict, wordcount, loc):
     """
